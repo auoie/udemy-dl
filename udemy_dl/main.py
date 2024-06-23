@@ -795,9 +795,7 @@ def create_lecture_group_dl(
                 )
                 asset_list.append(result)
             elif main_asset.asset_type == "Video":
-                pre_base = slugify(
-                    sanitize_filename(os.path.splitext(entry.asset.filename)[0])
-                )
+                pre_base = slugify(sanitize_filename(entry.title))
                 base_name = f"{prefix_id:03}_{pre_base}"
                 master_m3u8_name = f"{base_name}.master.m3u8"
                 index_m3u8_name = f"{base_name}.index.m3u8"
@@ -1626,9 +1624,7 @@ def run_program(state: State):
                 download_plan, course_path, playlist_course_path
             )
             independent_tasks = tasks_for_master_playlists(list_assets_paths)
-            logger.info(
-                f"> Downloading {len(independent_tasks)} master playlists"
-            )
+            logger.info(f"> Downloading {len(independent_tasks)} master playlists")
             download_cloudflare_files(independent_tasks, state.concurrent_downloads)
             index_tasks = tasks_for_index_playlist_assets(
                 list_assets_paths, state.logger
