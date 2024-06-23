@@ -1,0 +1,11 @@
+/.venv/
+__pycache__
+/logs/
+/resources/
+/keys/
+/glue_dir/
+/saved/
+/keyfile.json
+/out_dir/
+/temp/
+/.ruff_cache/

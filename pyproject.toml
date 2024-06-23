@@ -1,0 +1,36 @@
+[tool.poetry]
+name = "udemy-dl"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+package-mode = true
+
+[tool.poetry.dependencies]
+python = "^3.12"
+coloredlogs = "^15.0.1"
+browser-cookie3 = "^0.19.1"
+requests = "^2.32.3"
+python-dotenv = "^1.0.1"
+beautifulsoup4 = "^4.12.3"
+lxml = "^5.2.2"
+pathvalidate = "^3.2.0"
+python-slugify = "^8.0.4"
+m3u8 = "^5.0.0"
+aiohttp = "^3.9.5"
+tqdm = "^4.66.4"
+curl-cffi = "^0.6.4"
+typed-argparse = "^0.3.1"
+pydantic = "^2.7.4"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.4.8"
+pyright = "^1.1.367"
+datamodel-code-generator = "^0.25.7"
+
+[tool.poetry.scripts]
+udemy-dl = "udemy_dl.main:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
