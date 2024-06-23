@@ -45,17 +45,21 @@ async def download_cloudflare_files_async(tasks: List[Task], concurrency: int):
 
     async def get_async(task: Task):
         for i in range(10):
-            response = await session.get(task.url)
-            response.content
-            if response.ok:
-                obj = response.content
-                task.path.write_bytes(obj)
-                response.close()
-                return
-            else:
-                print(
-                    f"failed {task.url}: {response.status_code} (retrying attempt {i})"
-                )
+            try:
+                response = await session.get(task.url)
+                response.content
+                if response.ok:
+                    obj = response.content
+                    task.path.write_bytes(obj)
+                    response.close()
+                    return
+                else:
+                    print(
+                        f"failed {task.url}: {response.status_code} (retrying attempt {i})"
+                    )
+                    await asyncio.sleep(0.8)
+            except Exception as e:
+                print(f"failed {task.url}: {e} exception (retrying attempt {i})")
                 await asyncio.sleep(0.8)
 
     async_arr = [get_async(task) for task in tasks]
