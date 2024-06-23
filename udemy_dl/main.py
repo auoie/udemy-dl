@@ -1501,7 +1501,6 @@ def list_assets_with_paths(
             playlist_course_path, chapter_dl.chapter_folder_name
         )
         playlist_chapter_path.mkdir(parents=True, exist_ok=True)
-        chapter_path.mkdir(parents=True, exist_ok=True)
         for lesson in chapter_dl.lecture_dl:
             for asset in lesson.results:
                 asset_paths = AssetPaths(
