@@ -94,7 +94,7 @@ class SupplementaryAsset(BaseModel):
 
 
 class ModelItem(BaseModel):
-    field_class: Literal["File"] | Literal["SourceCode"] = Field(..., alias="_class")
+    field_class: Literal["lecture"] = Field(..., alias="_class")
     id: int
     title: str
     asset: Asset
