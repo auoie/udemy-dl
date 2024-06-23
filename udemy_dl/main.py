@@ -69,8 +69,8 @@ class Arguments(TypedArgs):
         help="The number of maximum concurrent downloads for batch downloads and segments (HLS and DASH, must be a number 1-30)",
     )
 
-    batch_download: bool = typed_argparse.arg(
-        help="Batch download captions+supplementary files+master playlists. Then batch download index playlists. Then sequentially download download quizzes+videos as normal."
+    batch_playlists: bool = typed_argparse.arg(
+        help="Batch download master playlists. Then batch download index playlists. Then sequentially download all other assets as normal."
     )
 
     embed_subs: bool = typed_argparse.arg(
@@ -235,7 +235,7 @@ def get_state(args: Arguments):
         keys=keys,
         log_level=log_level,
         logger=logger,
-        batch=args.batch_download,
+        batch=args.batch_playlists,
         embed_subs=args.embed_subs,
     )
 
@@ -1515,13 +1515,13 @@ def list_assets_with_paths(
     return result
 
 
-def tasks_for_independent_assets(
+def tasks_for_master_playlists(
     list_assets: List[AssetPaths],
 ) -> List[Task]:
     results: List[Task] = []
     for entry in list_assets:
         asset = entry.asset
-        if isinstance(asset, (CaptionDL, FileDL, MasterPlaylistDL)):
+        if isinstance(asset, MasterPlaylistDL):
             filepath = get_asset_filepath(
                 asset, entry.chapter_path, entry.playlist_chapter_path
             )
@@ -1625,9 +1625,9 @@ def run_program(state: State):
             list_assets_paths = list_assets_with_paths(
                 download_plan, course_path, playlist_course_path
             )
-            independent_tasks = tasks_for_independent_assets(list_assets_paths)
+            independent_tasks = tasks_for_master_playlists(list_assets_paths)
             logger.info(
-                f"> Downloading {len(independent_tasks)} captions, files, and master playlists"
+                f"> Downloading {len(independent_tasks)} master playlists"
             )
             download_cloudflare_files(independent_tasks, state.concurrent_downloads)
             index_tasks = tasks_for_index_playlist_assets(
