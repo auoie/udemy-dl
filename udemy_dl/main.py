@@ -886,7 +886,7 @@ def create_lecture_group_dl(
             for sup_asset in entry.supplementary_assets:
                 match sup_asset.asset_type:
                     case "File":
-                        if sup_asset.download_urls:
+                        if sup_asset.download_urls and sup_asset.download_urls.File:
                             file = sup_asset.download_urls.File[0]
                             if file:
                                 url = file.file
@@ -896,7 +896,23 @@ def create_lecture_group_dl(
                                 asset_list.append(file_dl)
                             else:
                                 logger.warning(
-                                    f"file has no download links: {sup_asset.title}"
+                                    f"File has no download links: {sup_asset.title}"
+                                )
+                    case "SourceCode":
+                        if (
+                            sup_asset.download_urls
+                            and sup_asset.download_urls.SourceCode
+                        ):
+                            file = sup_asset.download_urls.SourceCode[0]
+                            if file:
+                                url = file.file
+                                filename = sup_asset.filename
+                                filedl_name = f"{prefix_id:03}_{filename}"
+                                file_dl = FileDL(file_name=filedl_name, url=url)
+                                asset_list.append(file_dl)
+                            else:
+                                logger.warning(
+                                    f"SourceCode has no download links: {sup_asset.title}"
                                 )
                     case "ExternalLink":
                         filename = sup_asset.filename

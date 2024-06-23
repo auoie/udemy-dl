@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import List, Literal, Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -94,7 +94,7 @@ class SupplementaryAsset(BaseModel):
 
 
 class ModelItem(BaseModel):
-    field_class: Literal["File"] | Literal["SourceCode"] = Field(..., alias="_class")
+    field_class: str = Field(..., alias="_class")
     id: int
     title: str
     asset: Asset
