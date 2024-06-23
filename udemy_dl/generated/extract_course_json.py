@@ -8,13 +8,14 @@ from typing import List, Optional, Union
 from typing_extensions import Annotated
 
 from pydantic import BaseModel, Field
-from . import filtered_chapters, filtered_lectures, filtered_quizzes
+from . import filtered_chapters, filtered_lectures, filtered_quizzes, filtered_practices
 
 Result = Annotated[
     Union[
         filtered_quizzes.ModelItem,
         filtered_chapters.ModelItem,
         filtered_lectures.ModelItem,
+        filtered_practices.ModelItem,
     ],
     Field(discriminator="field_class"),
 ]

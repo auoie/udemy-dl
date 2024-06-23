@@ -43,6 +43,7 @@ from udemy_dl.generated import (
     filtered_lectures,
     filtered_chapters,
     filtered_quizzes,
+    filtered_practices,
 )
 
 
@@ -540,7 +541,11 @@ def result_to_chapter_metadata(result: filtered_chapters.ModelItem) -> ChapterMe
 
 class Chapter(BaseModel):
     meta: ChapterMetadata | None
-    assets: List[filtered_lectures.ModelItem | filtered_quizzes.ModelItem]
+    assets: List[
+        filtered_lectures.ModelItem
+        | filtered_quizzes.ModelItem
+        | filtered_practices.ModelItem
+    ]
 
 
 class Course(BaseModel):
@@ -769,7 +774,11 @@ def find_best_mp4(
 def create_lecture_group_dl(
     prefix_id: int,
     lecture_index: int,
-    entry: filtered_lectures.ModelItem | filtered_quizzes.ModelItem,
+    entry: (
+        filtered_lectures.ModelItem
+        | filtered_quizzes.ModelItem
+        | filtered_practices.ModelItem
+    ),
     state: State,
     subdomain: str,
 ) -> LectureGroupDL:
@@ -933,6 +942,12 @@ def create_lecture_group_dl(
                 logger.warning(f"unknown quiz type {entry.type} for {entry.title}")
             if quiz_asset:
                 asset_list.append(quiz_asset)
+        case filtered_practices.ModelItem():
+            logger.warning(
+                f"> I haven't gotten around to implementing {entry.field_class}: {entry.title} (id: {entry.id})"
+            )
+        case default:
+            assert_never(default)
     asset_list.sort(key=asset_to_comparable)
     return LectureGroupDL(
         prefix_id=prefix_id, lecture_index=lecture_index, results=asset_list
@@ -975,7 +990,11 @@ def transform_course_to_download_plan(
         lecture_dl_list: List[LectureGroupDL] = []
         for entry in chapter.assets:
             lecture_counter += 1
-            lecture_index = entry.object_index
+            lecture_index = (
+                -1
+                if isinstance(entry, filtered_practices.ModelItem)
+                else entry.object_index
+            )
             lecture_group = create_lecture_group_dl(
                 lecture_index=lecture_index,
                 prefix_id=lecture_counter,

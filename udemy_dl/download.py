@@ -135,8 +135,8 @@ def download_stream_retry(url: str, path: Path, state: State):
         try:
             download_stream(url, path)
             return
-        except:
-            state.logger.warning(f"failed {url} (retrying attempt {i})")
+        except Exception as e:
+            state.logger.warning(f"failed {url}: {e} (retrying attempt {i}) ")
 
 
 # https://stackoverflow.com/questions/16694907/download-large-file-in-python-with-requests
