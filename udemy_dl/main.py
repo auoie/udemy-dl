@@ -600,7 +600,7 @@ class QuizDL(BaseModel):
     file_name: str
     id: int
     url: str
-    type: Literal["practice-test", "coding-exercise"]
+    type: Literal["practice-test", "coding-exercise", "simple-quiz"]
 
 
 class MasterPlaylistDL(BaseModel):
@@ -868,6 +868,13 @@ def create_lecture_group_dl(
                     file_name=article_file_name,
                     id=entry.id,
                     type="coding-exercise",
+                    url=url,
+                )
+            elif entry.type == "simple-quiz":
+                quiz_asset = QuizDL(
+                    file_name=article_file_name,
+                    id=entry.id,
+                    type="simple-quiz",
                     url=url,
                 )
             else:
