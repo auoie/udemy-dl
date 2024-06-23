@@ -34,6 +34,7 @@ from udemy_dl.download import (
     SegmentDL,
     Task,
     download_cloudflare_files,
+    download_mp4,
     download_segment_stream,
 )
 from udemy_dl.generated import (
@@ -621,6 +622,12 @@ class VideoEncryptedDL(BaseModel):
     base_name: str
 
 
+class VideoMp4DL(BaseModel):
+    url: str
+    file_name: str
+    base_name: str
+
+
 class VideoRegularDL(BaseModel):
     index_file_name: str  # parse file -> extract segments -> download the segments
     file_name: str  # ends in .ts
@@ -644,6 +651,12 @@ class EmbedSubs(BaseModel):
     file_name: str  # ends in .sub.mp4
     base_name: str
     preembed_file_name: str  # ends in .ts
+
+
+class EmbedMp4Subs(BaseModel):
+    file_name: str  # ends in .sub.mp4
+    base_name: str
+    preembed_file_name: str  # ends in .mp4
 
 
 class ArticleWrite(BaseModel):
@@ -679,7 +692,9 @@ AssetTask = (
     | VideoEncryptedDL
     | VideoDecrypt
     | VideoDecryptEmbedSubs
+    | VideoMp4DL
     | EmbedSubs
+    | EmbedMp4Subs
 )
 
 
@@ -698,23 +713,28 @@ def asset_to_comparable(asset: AssetTask) -> int:
             return 5
         case ArticleWrite():
             return 6
+        case VideoMp4DL():
+            return 7
         case VideoRegularDL():
             # must come after caption and index playlist
-            return 7
+            return 8
         case VideoEncryptedDL():
             # must come after caption and index playlist
-            return 8
+            return 9
         case VideoDecrypt():
             # must come after VideoEncryptedDL
-            return 9
+            return 10
         case VideoDecryptEmbedSubs():
             # must come after VideoEncryptedDL
-            return 10
+            return 11
         case EmbedSubs():
             # must come after VideoDecrypt, VideoNormalDL. should be independent from VideoDecryptEmbedSubs
-            return 11
-        case QuizDL():
             return 12
+        case EmbedMp4Subs():
+            # must come after VideoMp4DL()
+            return 13
+        case QuizDL():
+            return 14
 
 
 class LectureGroupDL(BaseModel):
@@ -729,6 +749,20 @@ def find_hls_stream(
     for url in sources:
         if url.type == "application/x-mpegURL":
             return url
+    return None
+
+
+def find_best_mp4(
+    sources: List[filtered_lectures.MediaSource], encrypted: bool
+) -> filtered_lectures.MediaSource | None:
+    if encrypted:
+        return None
+    if not sources:
+        return None
+    urls = sorted(sources, key=lambda url: int(url.label.split("x")[0]))
+    best_url = urls[-1]
+    if best_url.type == "video/mp4":
+        return best_url
     return None
 
 
@@ -764,7 +798,25 @@ def create_lecture_group_dl(
                 encrypted_name = get_encrypted_video_name(base_name)
                 embed_subs_name = get_embedsubs_video_name(base_name)
                 if not hls_stream:
-                    logger.warning(f"unable to find hls stream for {main_asset.title}")
+                    best_url = find_best_mp4(urls, encrypted)
+                    if best_url:
+                        mp4_name = f"{base_name}.mp4"
+                        link = best_url.src
+                        mp4_dl = VideoMp4DL(
+                            url=link, base_name=base_name, file_name=mp4_name
+                        )
+                        asset_list.append(mp4_dl)
+                        if state.embed_subs:
+                            mp4_embed = EmbedMp4Subs(
+                                file_name=embed_subs_name,
+                                base_name=base_name,
+                                preembed_file_name=mp4_name,
+                            )
+                            asset_list.append(mp4_embed)
+                    else:
+                        logger.warning(
+                            f"unable to find hls or mp4 stream for {main_asset.title}"
+                        )
                 else:
                     final_url = hls_stream.src
                     master_dl = MasterPlaylistDL(
@@ -956,7 +1008,7 @@ def download_video(
     tmp_filepath = Path(chapter_path, f"{asset.file_name}.part").resolve()
     filepath = Path(chapter_path, asset.file_name)
     index_path = Path(playlist_chapter_path, asset.index_file_name)
-    file_base, ext = os.path.splitext(asset.file_name)
+    file_base = asset.base_name
     if not index_path.exists():
         state.logger.warning(f"index playlist {index_path} missing")
         return
@@ -988,6 +1040,8 @@ def get_asset_filepath(asset: AssetTask, chapter_path, playlist_chapter) -> Path
             | VideoDecrypt()
             | EmbedSubs()
             | VideoDecryptEmbedSubs()
+            | VideoMp4DL()
+            | EmbedMp4Subs()
         ):
             return Path(chapter_path, asset.file_name).resolve()
         case MasterPlaylistDL() | IndexPlaylistDL():
@@ -1052,7 +1106,7 @@ def should_skip_dl(asset: AssetTask, filepath: Path, chapter_path: Path) -> bool
             return (
                 filepath.exists() or embedsubs_path.exists() or decrypted_path.exists()
             )
-        case VideoRegularDL() | VideoDecrypt():
+        case VideoRegularDL() | VideoDecrypt() | VideoMp4DL():
             base_name = asset.base_name
             embedsubs_path = get_embedsubs_video_path(chapter_path, base_name)
             return filepath.exists() or embedsubs_path.exists()
@@ -1064,6 +1118,7 @@ def should_skip_dl(asset: AssetTask, filepath: Path, chapter_path: Path) -> bool
             | ArticleWrite()
             | EmbedSubs()
             | VideoDecryptEmbedSubs()
+            | EmbedMp4Subs()
         ):
             return filepath.exists()
         case default:
@@ -1241,8 +1296,8 @@ def decrypt_video_embed_subs(
     encrypted_filepath.unlink(missing_ok=True)
 
 
-def embed_subs(
-    asset: EmbedSubs | VideoDecryptEmbedSubs,
+def run_embed_subs(
+    asset: EmbedSubs | VideoDecryptEmbedSubs | EmbedMp4Subs,
     filepath: Path,
     chapter_path: Path,
     preembed_file_name: str,
@@ -1328,7 +1383,11 @@ def download_asset(
         case VideoRegularDL() | VideoEncryptedDL():
             download_video(asset, chapter_path, playlist_chapter_path, state)
         case EmbedSubs():
-            embed_subs(
+            run_embed_subs(
+                asset, filepath, chapter_path, asset.preembed_file_name, state.logger
+            )
+        case EmbedMp4Subs():
+            run_embed_subs(
                 asset, filepath, chapter_path, asset.preembed_file_name, state.logger
             )
         case VideoDecryptEmbedSubs():
@@ -1342,7 +1401,7 @@ def download_asset(
                 )
             elif decrypted_filepath.exists():
                 # happens iff ran with `--decrypt` and without `--embed` previously
-                embed_subs(
+                run_embed_subs(
                     asset,
                     filepath,
                     chapter_path,
@@ -1353,6 +1412,13 @@ def download_asset(
                 logger.warning(
                     f"files {decrypted_filepath} and {encrypted_filepath} missing"
                 )
+        case VideoMp4DL():
+            tmp_filepath = Path(chapter_path, f"{asset.file_name}.part").resolve()
+            download_mp4(asset.url, tmp_filepath, state)
+            if tmp_filepath.exists():
+                tmp_filepath.rename(filepath)
+            else:
+                state.logger.warning(f"{tmp_filepath} not found. rename failed")
         case _:
             assert_never(asset)
 

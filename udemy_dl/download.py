@@ -5,6 +5,7 @@ from typing import Coroutine, List
 
 import aiohttp
 from pydantic import BaseModel
+import requests
 import tqdm
 from curl_cffi.requests import BrowserType, AsyncSession
 
@@ -112,3 +113,33 @@ def download_segment_stream(segment_dl: SegmentDL, state: State):
     MBpS = mbs / duration
 
     print(f"{mbs:.3g} MB in {duration:.3g}s: {MBpS:.3g} MB/s")
+
+
+def download_mp4(url: str, path: Path, state: State):
+    start = time.time()
+    download_stream_retry(url, path, state)
+    end = time.time()
+    duration = end - start
+    mbs = ((path.stat().st_size) / 1024) / 1024
+    MBpS = mbs / duration
+
+    print(f"{mbs:.3g} MB in {duration:.3g}s: {MBpS:.3g} MB/s")
+
+
+def download_stream_retry(url: str, path: Path, state: State):
+    for i in range(10):
+        try:
+            download_stream(url, path)
+            return
+        except:
+            state.logger.warning(f"failed {url} (retrying attempt {i})")
+
+
+# https://stackoverflow.com/questions/16694907/download-large-file-in-python-with-requests
+def download_stream(url: str, path: Path):
+    with requests.get(url, stream=True) as r:
+        r.raise_for_status()
+        with open(path, "wb") as f:
+            for chunk in r.iter_content(chunk_size=65536):
+                f.write(chunk)
+    return
