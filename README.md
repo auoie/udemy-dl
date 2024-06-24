@@ -47,7 +47,7 @@ udemy-dl \
 ### Help
 
 ```text
-usage: udemy-dl [-h] -c COURSE_URL [-b BEARER_TOKEN] [-l LANG] [--concurrent-downloads CONCURRENT_DOWNLOADS] [--batch-download] [--embed-subs] [--decrypt] [--info] [--id-as-course-name] [--save-to-file] [--load-from-file] [--log-level {DEBUG,INFO,ERROR,WARNING,CRITICAL}] [--browser {chrome,firefox,opera,edge,brave,chromium,vivaldi,safari}] [-o OUT] [--use-continuous-lecture-numbers]
+usage: udemy-dl [-h] -c COURSE_URL [-b BEARER_TOKEN] [-l LANG] [--concurrent-downloads CONCURRENT_DOWNLOADS] [--batch-playlists] [--embed-subs] [--decrypt] [--info] [--id-as-course-name] [--save-to-file] [--load-from-file] [--log-level {DEBUG,INFO,ERROR,WARNING,CRITICAL}] [--browser {chrome,firefox,opera,edge,brave,chromium,vivaldi,safari}] [-o OUT] [--use-continuous-lecture-numbers]
 
 options:
   -h, --help            show this help message and exit
@@ -58,7 +58,7 @@ options:
   -l LANG, --lang LANG  The language to download for captions, specify 'all' to download all captions [default: en]
   --concurrent-downloads CONCURRENT_DOWNLOADS
                         The number of maximum concurrent downloads for batch downloads and segments (HLS and DASH, must be a number 1-30) [default: 16]
-  --batch-download      Batch download captions+supplementary files+master playlists. Then batch download index playlists. Then sequentially download download quizzes+videos as normal.
+  --batch-playlists     Batch download master playlists. Then batch download index playlists. Then sequentially download all other assets as normal.
   --embed-subs          If a video has any subs, embed those subs in the output video
   --decrypt             Decrypt the encrypted videos. Requires a {key: kid} pair in `keyfile.json`
   --info                If specified, only course information will be printed, nothing will be downloaded
