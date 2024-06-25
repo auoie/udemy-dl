@@ -77,3 +77,8 @@ options:
 ## Credits
 
 - https://github.com/Puyodead1/udemy-downloader.
+
+## Todo
+
+- download the `"_class": "practice"` type course entry
+- `ffmpeg` doesn't return an error status if the `key` and `kid` are incorrect. don't decrypt a video if the `key` and `kid` are incorrect.
