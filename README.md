@@ -36,7 +36,7 @@ is required in `keyfile.json`.
 ```bash
 udemy-dl --help
 udemy-dl \
-  --batch-download \
+  --batch-playlists \
   --embed-subs \
   --decrypt \
   --concurrent-downloads 32 \
