@@ -41,7 +41,7 @@ class SegmentDL(BaseModel):
 
 async def download_cloudflare_files_async(tasks: List[Task], concurrency: int):
     impersonate = BrowserType.chrome
-    session = AsyncSession(impersonate=impersonate, max_clients=2 * concurrency)
+    session = AsyncSession(impersonate=impersonate, max_clients=2 * concurrency, timeout=5)
 
     async def get_async(task: Task):
         for i in range(10):
