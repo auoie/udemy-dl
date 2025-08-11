@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -35,8 +35,17 @@ class VideoItem(BaseModel):
     file: str
 
 
+class EBookItem(BaseModel):
+    label: str
+    file: str
+
+
 class DownloadUrls(BaseModel):
     Video: List[VideoItem]
+
+
+class EbookDownloadUrls(BaseModel):
+    E_Book: List[EBookItem] = Field(None, alias="E-Book")
 
 
 class StreamUrls(BaseModel):
@@ -55,7 +64,7 @@ class Asset(BaseModel):
     media_license_token: Optional[str]
     media_sources: List[MediaSource]
     course_is_drmed: bool
-    download_urls: Optional[DownloadUrls]
+    download_urls: Optional[Union[DownloadUrls, EbookDownloadUrls]]
     slide_urls: List
     stream_urls: Optional[StreamUrls]
     time_estimation: int

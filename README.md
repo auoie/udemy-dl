@@ -82,3 +82,4 @@ options:
 
 - download the `"_class": "practice"` type course entry
 - `ffmpeg` doesn't return an error status if the `key` and `kid` are incorrect. don't decrypt a video if the `key` and `kid` are incorrect.
+- Handle e-books. Example: https://www.udemy.com/course/csharp-tutorial-for-beginners/learn/
