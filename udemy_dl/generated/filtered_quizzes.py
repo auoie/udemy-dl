@@ -14,16 +14,16 @@ class ModelItem(BaseModel):
     id: int
     title: str
     type: str
-    created: str
-    description: str
-    title_cleaned: str
-    is_published: bool
-    sort_order: int
+    # created: str
+    # description: str
+    # title_cleaned: str
+    # is_published: bool
+    # sort_order: int
     object_index: int
-    is_draft: bool
-    version: int
-    duration: int
-    pass_percent: int
+    # is_draft: bool
+    # version: int
+    # duration: int
+    # pass_percent: int
 
 
 # class Model(BaseModel):
