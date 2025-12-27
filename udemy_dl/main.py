@@ -191,12 +191,15 @@ def get_keys(key_file_path: Path) -> KeyIdPair | None:
 
 
 def normalize_course_url(url: str, logger: Logger) -> str:
+    logger.info(f"normalize_course_url input url: {url}")
     result = urlparse(url)
     path_split = result.path.split("/")
     if len(path_split) <= 2:
         logger.fatal(f"url is invalid: {url}")
     course_name = path_split[2]
-    return f"https://www.udemy.com/course/{course_name}/learn"
+    return_url = f"https://{result.netloc}/course/{course_name}/learn"
+    logger.info(f"normalize_course_url result url: {return_url}")
+    return return_url
 
 
 def get_state(args: Arguments):
@@ -209,6 +212,7 @@ def get_state(args: Arguments):
         date_fmt=constants.LOG_DATE_FORMAT,
         log_file_path=constants.LOG_FILE_PATH,
     )
+    logger.info("Starting program")
     logger.info(f"Output directory set to {download_dir}")
     download_dir.mkdir(parents=True, exist_ok=True)
     Path(constants.SAVED_DIR).mkdir(parents=True, exist_ok=True)
@@ -381,6 +385,7 @@ class UdemyClient:
             self.session = Session(cookieJar=browser_to_cookie(browser))
 
     def _extract_subscription_course_info(self, url: str) -> int:
+        self.logger.info(f"_extract_subscription_course_info url: {url}")
         response = self.session._get(url, self.logger)
         if response is None:
             self.logger.fatal("Unable to get a response")
