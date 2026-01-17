@@ -21,6 +21,12 @@ python3 -m pip install poetry
 python3 -m poetry install
 ```
 
+```bash
+$HOME/.pyenv/versions/3.12.11/bin/python3 -m venv .venv
+source ./.venv/bin/activate
+pip install poetry==1.8.5
+```
+
 ### Keyfile
 
 For decryption, a keyfile of the form
