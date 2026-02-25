@@ -11,8 +11,8 @@ from pathlib import Path
 import subprocess
 import sys
 import time
-from typing import List, Literal, Optional, Tuple, assert_never
-from bs4 import BeautifulSoup, NavigableString, Tag
+from typing import Any, List, Literal, Optional, Tuple, assert_never
+from bs4 import BeautifulSoup, Tag
 import dotenv
 import m3u8
 from pydantic import BaseModel
@@ -137,7 +137,7 @@ def get_concurrent_downloads(cd: int) -> int:
     return cd
 
 
-def get_keyidpair(keys: dict) -> KeyIdPair | None:
+def get_keyidpair(keys: dict[Any, Any]) -> KeyIdPair | None:
     key_list = list(keys.keys())
     if len(key_list) != 1:
         return None
@@ -185,7 +185,7 @@ def create_logger(
 def get_keys(key_file_path: Path) -> KeyIdPair | None:
     keys = None
     if key_file_path.exists():
-        key_dict: dict = json.loads(key_file_path.read_bytes())
+        key_dict: dict[Any, Any] = json.loads(key_file_path.read_bytes())
         keys = get_keyidpair(key_dict)
     return keys
 
@@ -252,12 +252,12 @@ def cookiejar_to_requestscookiejar(cookieJar: CookieJar) -> RequestsCookieJar:
 
 class Session(object):
     _session: requests.Session
-    _headers: dict[str, str | None]
+    headers: dict[str, str | None]
     _cj: RequestsCookieJar | None
 
     def __init__(self, cookieJar: CookieJar | None):
         self._cj = cookiejar_to_requestscookiejar(cookieJar) if cookieJar else None
-        self._headers: dict[str, str | None] = {
+        self.headers: dict[str, str | None] = {
             "Origin": "www.udemy.com",
             # "User-Agent":
             # "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:90.0) Gecko/20100101 Firefox/90.0",
@@ -272,13 +272,13 @@ class Session(object):
             ),
         )
 
-    def _set_auth_headers(self, bearer_token: str = ""):
-        self._headers["Authorization"] = "Bearer {}".format(bearer_token)
-        self._headers["X-Udemy-Authorization"] = "Bearer {}".format(bearer_token)
+    def set_auth_headers(self, bearer_token: str = ""):
+        self.headers["Authorization"] = "Bearer {}".format(bearer_token)
+        self.headers["X-Udemy-Authorization"] = "Bearer {}".format(bearer_token)
 
-    def _get(self, url: str, logger: Logger) -> requests.Response | None:
+    def get(self, url: str, logger: Logger) -> requests.Response | None:
         for i in range(10):
-            response = self._session.get(url, headers=self._headers, cookies=self._cj)
+            response = self._session.get(url, headers=self.headers, cookies=self._cj)
             if response.ok:
                 return response
             else:
@@ -289,9 +289,9 @@ class Session(object):
                 time.sleep(0.8)
         return None
 
-    def _get_allow_5xx(self, url: str, logger: Logger) -> requests.Response | None:
+    def get_allow_5xx(self, url: str, logger: Logger) -> requests.Response | None:
         for i in range(10):
-            response = self._session.get(url, headers=self._headers, cookies=self._cj)
+            response = self._session.get(url, headers=self.headers, cookies=self._cj)
             if response.ok or response.status_code in [502, 503]:
                 return response
             if not response.ok:
@@ -303,7 +303,7 @@ class Session(object):
         return None
 
     def terminate(self):
-        self._set_auth_headers()
+        self.set_auth_headers()
         return
 
 
@@ -312,7 +312,7 @@ class UdemyAuth(object):
         self._session = session
 
     def authenticate(self, bearer_token: str):
-        self._session._set_auth_headers(bearer_token=bearer_token)
+        self._session.set_auth_headers(bearer_token=bearer_token)
         return self._session
 
 
@@ -371,7 +371,7 @@ class UdemyClient:
         self.logger = logger
         if bearer_token:
             session = Session(cookieJar=None)
-            session._set_auth_headers(bearer_token=bearer_token)
+            session.set_auth_headers(bearer_token=bearer_token)
             self.session = session
         else:
             if browser is None:
@@ -386,7 +386,7 @@ class UdemyClient:
 
     def _extract_subscription_course_info(self, url: str) -> int:
         self.logger.info(f"_extract_subscription_course_info url: {url}")
-        response = self.session._get(url, self.logger)
+        response = self.session.get(url, self.logger)
         if response is None:
             self.logger.fatal("Unable to get a response")
             sys.exit(1)
@@ -396,13 +396,9 @@ class UdemyClient:
         match data:
             case Tag():
                 data_args = data.attrs["data-module-args"]
-                data_json = json.loads(data_args)
+                data_json = json.loads(str(data_args))
                 course_id = data_json.get("courseId", None)
                 return course_id
-            case NavigableString():
-                self.logger.fatal(
-                    "Extracted a NavigableString. Expected a Tag instead. Exiting..."
-                )
             case None:
                 self.logger.fatal(
                     "Unable to extract arguments from course page! Make sure you have a cookies.txt file!"
@@ -413,10 +409,10 @@ class UdemyClient:
     def _extract_course_info_json(
         self, subdomain: str, url: str, course_id: int
     ) -> extract_course_info_json.Model:
-        self.session._headers.update({"Referer": url})
+        self.session.headers.update({"Referer": url})
         url = constants.COURSE_INFO_URL.format(subdomain=subdomain, course_id=course_id)
         try:
-            response = self.session._get(url, self.logger)
+            response = self.session.get(url, self.logger)
             if response is None:
                 self.logger.fatal("Unable to get a response")
                 sys.exit(1)
@@ -434,7 +430,7 @@ class UdemyClient:
             api_url.replace("10000", "50") if api_url.endswith("10000") else api_url
         )
         try:
-            response = self.session._get(api_url, self.logger)
+            response = self.session.get(api_url, self.logger)
             if response is None:
                 self.logger.fatal("Unable to get a response")
                 sys.exit(1)
@@ -447,7 +443,7 @@ class UdemyClient:
             while _next:
                 self.logger.info("> Downloading course information.. ")
                 try:
-                    response = self.session._get(_next, self.logger)
+                    response = self.session.get(_next, self.logger)
                     if response is None:
                         self.logger.fatal("Unable to get a response")
                         sys.exit(1)
@@ -464,13 +460,13 @@ class UdemyClient:
                         base_data.results.append(d)
             return base_data
 
-    def _extract_course_assets_json(
+    def extract_course_assets_json(
         self, course_url: str, course_id: int, subdomain: str
     ):
-        self.session._headers.update({"Referer": course_url})
+        self.session.headers.update({"Referer": course_url})
         api_url = constants.COURSE_URL.format(subdomain=subdomain, course_id=course_id)
         try:
-            resp = self.session._get_allow_5xx(api_url, self.logger)
+            resp = self.session.get_allow_5xx(api_url, self.logger)
             if resp is None:
                 self.logger.fatal("Unable to get a response")
                 sys.exit(1)
@@ -489,15 +485,15 @@ class UdemyClient:
         else:
             return resp
 
-    def _extract_course_info(
+    def extract_course_info(
         self, course_url: str
     ) -> Tuple[extract_course_info_json.Model, str]:
         logger = self.logger
         extract_result = extract_course_name(course_url)
         if extract_result is None:
-            logger.warn("course_url is invalid:", course_url)
+            logger.warning("course_url is invalid:", course_url)
             sys.exit(1)
-        subdomain, course_name = extract_result
+        subdomain, _course_name = extract_result
         course: extract_course_info_json.Model | None = None
         course_id = self._extract_subscription_course_info(course_url)
         course = self._extract_course_info_json(subdomain, course_url, course_id)
@@ -965,7 +961,7 @@ def create_lecture_group_dl(
             logger.warning(
                 f"> I haven't gotten around to implementing {entry.field_class}: {entry.title} (id: {entry.id})"
             )
-        case default:
+        case _:
             assert_never(default)
     asset_list.sort(key=asset_to_comparable)
     return LectureGroupDL(
@@ -1052,11 +1048,12 @@ def download_video(
         return
     index_text = index_path.read_text()
     parsed = m3u8.loads(index_text)
-    uris: List[str] = parsed.segments.uri
+    uris: List[str | None] = parsed.segments.uri
     tasks: List[Task] = []
     for i, uri in enumerate(uris):
-        task = Task(path=Path(chapter_path, f"{file_base}_{i}.frag.ts"), url=uri)
-        tasks.append(task)
+        if uri != None:
+            task = Task(path=Path(chapter_path, f"{file_base}_{i}.frag.ts"), url=uri)
+            tasks.append(task)
     segment_dl = SegmentDL(path=tmp_filepath, tasks=tasks)
     download_segment_stream(segment_dl, state)
     if tmp_filepath.exists():
@@ -1065,7 +1062,9 @@ def download_video(
         state.logger.warning(f"{tmp_filepath} not found. rename failed")
 
 
-def get_asset_filepath(asset: AssetTask, chapter_path, playlist_chapter) -> Path:
+def get_asset_filepath(
+    asset: AssetTask, chapter_path: Path, playlist_chapter: Path
+) -> Path:
     match asset:
         case (
             CaptionDL()
@@ -1084,7 +1083,7 @@ def get_asset_filepath(asset: AssetTask, chapter_path, playlist_chapter) -> Path
             return Path(chapter_path, asset.file_name).resolve()
         case MasterPlaylistDL() | IndexPlaylistDL():
             return Path(playlist_chapter, asset.file_name).resolve()
-        case default:
+        case _:
             assert_never(default)
 
 
@@ -1159,7 +1158,7 @@ def should_skip_dl(asset: AssetTask, filepath: Path, chapter_path: Path) -> bool
             | EmbedMp4Subs()
         ):
             return filepath.exists()
-        case default:
+        case _:
             assert_never(default)
 
 
@@ -1377,7 +1376,7 @@ def download_asset(
     logger.info(f"\t\tResolving asset {type(asset).__name__:>17} -> {asset.file_name}")
     match asset:
         case CaptionDL() | FileDL() | MasterPlaylistDL():
-            response = session._get(asset.url, logger)  # probably don't need cookies
+            response = session.get(asset.url, logger)  # probably don't need cookies
             if not response:
                 logger.warning(f"unable to fetch {asset.file_name}")
                 return
@@ -1391,7 +1390,12 @@ def download_asset(
                 return
             parsed = m3u8.loads(master_path.read_text())
             best_playlist: m3u8.Playlist = parsed.playlists[-1]
-            response = session._get(
+            if best_playlist.uri == None:
+                state.logger.warning(
+                    f"uri is none {asset.file_name} ({best_playlist.uri})"
+                )
+                return
+            response = session.get(
                 best_playlist.uri, state.logger
             )  # probably don't need cookies from https://udemy.com behind CloudFlare
             if not response:
@@ -1409,7 +1413,7 @@ def download_asset(
             tmp_filepath.write_text(asset.contents)
             tmp_filepath.rename(filepath)
         case QuizDL():
-            response = session._get(
+            response = session.get(
                 asset.url, logger
             )  # probably need cookies: from Udemy API
             if not response:
@@ -1545,10 +1549,7 @@ def tasks_for_master_playlists(
             )
             if should_skip_dl(asset, filepath, entry.chapter_path):
                 continue
-            task = Task(
-                path=filepath,
-                url=asset.url,
-            )
+            task = Task(path=filepath, url=asset.url, type="m3u8_playlist")
             results.append(task)
     return results
 
@@ -1571,11 +1572,9 @@ def tasks_for_index_playlist_assets(
                 continue
             parsed = m3u8.loads(master_path.read_text())
             best_playlist: m3u8.Playlist = parsed.playlists[-1]
-            task = Task(
-                path=filepath,
-                url=best_playlist.uri,
-            )
-            results.append(task)
+            if best_playlist.uri != None:
+                task = Task(path=filepath, url=best_playlist.uri, type="m3u8_playlist")
+                results.append(task)
     return results
 
 
@@ -1609,14 +1608,14 @@ def run_program(state: State):
     else:
         logger.info(f"> Fetching course information for {state.course_url}")
         # fetching course info
-        course_info, subdomain = udemy_client._extract_course_info(state.course_url)
+        course_info, subdomain = udemy_client.extract_course_info(state.course_url)
         course_id = course_info.id
         logger.info(
             f"> Course information fetched: published title is '{course_info.published_title}' and course id is '{course_id}'"
         )
         logger.info("> Fetching list of assets, this may take a minute...")
         # getting course assets json
-        course_assets_json = udemy_client._extract_course_assets_json(
+        course_assets_json = udemy_client.extract_course_assets_json(
             state.course_url, course_id, subdomain
         )
         logger.info(

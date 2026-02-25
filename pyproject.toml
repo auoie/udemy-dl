@@ -31,6 +31,9 @@ datamodel-code-generator = "^0.25.7"
 [tool.poetry.scripts]
 udemy-dl = "udemy_dl.main:main"
 
+[tool.pyright]
+typeCheckingMode = "strict"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

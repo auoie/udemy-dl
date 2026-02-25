@@ -1,7 +1,7 @@
 import asyncio
 from pathlib import Path
 import time
-from typing import Coroutine, List
+from typing import Coroutine, List, Literal, Sequence
 
 import aiohttp
 from pydantic import BaseModel
@@ -14,7 +14,7 @@ from udemy_dl.state import State
 
 # https://blog.jonlu.ca/posts/async-python-http
 # https://isaacong.me/posts/tracking-progress-of-python-asyncio-coroutines/
-async def gather_with_concurrency[T, R](n: int, tasks: List[Coroutine[T, T, R]]):
+async def gather_with_concurrency[T, R](n: int, tasks: Sequence[Coroutine[T, T, R]]):
     semaphore = asyncio.Semaphore(n)
 
     async def sem_task(task: Coroutine[T, T, R]):
@@ -29,9 +29,37 @@ async def gather_with_concurrency[T, R](n: int, tasks: List[Coroutine[T, T, R]])
     return results
 
 
+# if links in m3u8 master playlist file are relative, resolves the urls in the output content
+# otherwise, nothing changes
+# e.g.
+# master url: https://hls-enc-c.udemycdn.com/out/v1/a0a7c60215fa451ba353e87e64de0bf7/f1a19e30df3f4529939385f046863720/6045af0b578e4f29b9b0594ae6d0eaca/index.m3u8
+# index url entry: 9678eef6ea334915a28f74f6132a3ec6/95b06a106c86497995ae9bed1f33e292/index_1.m3u8
+# result entry: https://hls-enc-c.udemycdn.com/out/v1/a0a7c60215fa451ba353e87e64de0bf7/f1a19e30df3f4529939385f046863720/9678eef6ea334915a28f74f6132a3ec6/95b06a106c86497995ae9bed1f33e292/index_1.m3u8
+
+
+# if links in m3u8 index playlist file are relative, resolves the urls in the output content
+# otherwise, nothing changes
+# e.g.
+# index url: curl https://hls-enc-c.udemycdn.com/out/v1/a0a7c60215fa451ba353e87e64de0bf7/f1a19e30df3f4529939385f046863720/6045af0b578e4f29b9b0594ae6d0eaca/9678eef6ea334915a28f74f6132a3ec6/95b06a106c86497995ae9bed1f33e292/index_10.m3u8
+# .ts file entry: ../../../9678eef6ea334915a28f74f6132a3ec6/95b06a106c86497995ae9bed1f33e292/index_10_63.ts
+# result entry: https://hls-enc-c.udemycdn.com/out/v1/a0a7c60215fa451ba353e87e64de0bf7/f1a19e30df3f4529939385f046863720/9678eef6ea334915a28f74f6132a3ec6/95b06a106c86497995ae9bed1f33e292/index_10_63.ts
+def normalize_m3u8(content: str, base_url: str) -> str:
+    from urllib.parse import urljoin
+
+    return "\n".join(
+        (
+            line
+            if not line.strip() or line.strip().startswith("#")
+            else urljoin(base_url, line.strip())
+        )
+        for line in content.splitlines()
+    )
+
+
 class Task(BaseModel):
     path: Path
     url: str
+    type: Literal["m3u8_playlist"] | None = None
 
 
 class SegmentDL(BaseModel):
@@ -41,7 +69,9 @@ class SegmentDL(BaseModel):
 
 async def download_cloudflare_files_async(tasks: List[Task], concurrency: int):
     impersonate = BrowserType.chrome
-    session = AsyncSession(impersonate=impersonate, max_clients=2 * concurrency, timeout=5)
+    session = AsyncSession(
+        impersonate=impersonate, max_clients=2 * concurrency, timeout=5
+    )
 
     async def get_async(task: Task):
         for i in range(10):
@@ -50,6 +80,10 @@ async def download_cloudflare_files_async(tasks: List[Task], concurrency: int):
                 response.content
                 if response.ok:
                     obj = response.content
+                    if task.type == "m3u8_playlist":
+                        obj = normalize_m3u8(obj.decode("utf-8"), task.url).encode(
+                            "utf-8"
+                        )
                     task.path.write_bytes(obj)
                     response.close()
                     return
