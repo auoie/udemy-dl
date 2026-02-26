@@ -45,7 +45,7 @@ class DownloadUrls(BaseModel):
 
 
 class EbookDownloadUrls(BaseModel):
-    E_Book: List[EBookItem] = Field(None, alias="E-Book")
+    E_Book: List[EBookItem] | None = Field(None, alias="E-Book")
 
 
 class StreamUrls(BaseModel):
@@ -65,7 +65,7 @@ class Asset(BaseModel):
     media_sources: List[MediaSource]
     course_is_drmed: bool
     download_urls: Optional[Union[DownloadUrls, EbookDownloadUrls]]
-    slide_urls: List
+    # slide_urls: List
     stream_urls: Optional[StreamUrls]
     time_estimation: int
 
@@ -91,7 +91,7 @@ class SupplementaryAsset(BaseModel):
     asset_type: str
     # media_license_token: None
     # time_estimation: int
-    media_sources: List
+    # media_sources: List
     course_is_drmed: bool
     external_url: str
     # stream_urls: None

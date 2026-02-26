@@ -27,6 +27,8 @@ pydantic = "^2.7.4"
 ruff = "^0.4.8"
 pyright = "^1.1.367"
 datamodel-code-generator = "^0.25.7"
+types-requests = "^2.32.4.20260107"
+types-urllib3 = "^1.26.25.14"
 
 [tool.poetry.scripts]
 udemy-dl = "udemy_dl.main:main"
