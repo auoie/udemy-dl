@@ -24,8 +24,12 @@ class SSLCiphers(HTTPAdapter):
 
     def init_poolmanager(self, *args: Any, **kwargs: Any) -> PoolManager:
         kwargs["ssl_context"] = self._ssl_context
-        return super().init_poolmanager(*args, **kwargs)
+        return super().init_poolmanager(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+            *args, **kwargs
+        )
 
     def proxy_manager_for(self, *args: Any, **kwargs: Any) -> ProxyManager:
         kwargs["ssl_context"] = self._ssl_context
-        return super().proxy_manager_for(*args, **kwargs)
+        return super().proxy_manager_for(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+            *args, **kwargs
+        )

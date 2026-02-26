@@ -22,8 +22,8 @@ from pathvalidate import sanitize_filename
 from slugify import slugify
 from typed_argparse import TypedArgs
 import typed_argparse
-from coloredlogs import ColoredFormatter
-import browser_cookie3
+from coloredlogs import ColoredFormatter  # pyright: ignore[reportMissingTypeStubs]
+import browser_cookie3  # pyright: ignore[reportMissingTypeStubs]
 from urllib.parse import urlparse
 from requests.cookies import RequestsCookieJar
 
@@ -246,7 +246,9 @@ def get_state(args: Arguments):
 
 def cookiejar_to_requestscookiejar(cookieJar: CookieJar) -> RequestsCookieJar:
     result = requests.cookies.RequestsCookieJar()
-    requests.cookies.merge_cookies(result, cookieJar)
+    requests.cookies.merge_cookies(  # pyright: ignore[reportUnknownMemberType]
+        result, cookieJar
+    )
     return result
 
 
@@ -331,21 +333,23 @@ def get_session_and_cookies(
 def browser_to_cookie(browser: T_BROWSER_TYPE) -> CookieJar:
     match browser:
         case "chrome":
-            return browser_cookie3.chrome()
+            return browser_cookie3.chrome()  # pyright: ignore[reportUnknownMemberType]
         case "firefox":
-            return browser_cookie3.firefox()
+            return browser_cookie3.firefox()  # pyright: ignore[reportUnknownMemberType]
         case "opera":
-            return browser_cookie3.opera()
+            return browser_cookie3.opera()  # pyright: ignore[reportUnknownMemberType]
         case "edge":
-            return browser_cookie3.edge()
+            return browser_cookie3.edge()  # pyright: ignore[reportUnknownMemberType]
         case "brave":
-            return browser_cookie3.brave()
+            return browser_cookie3.brave()  # pyright: ignore[reportUnknownMemberType]
         case "chromium":
-            return browser_cookie3.chromium()
+            return (
+                browser_cookie3.chromium()  # pyright: ignore[reportUnknownMemberType]
+            )
         case "vivaldi":
-            return browser_cookie3.vivaldi()
+            return browser_cookie3.vivaldi()  # pyright: ignore[reportUnknownMemberType]
         case "safari":
-            return browser_cookie3.safari()
+            return browser_cookie3.safari()  # pyright: ignore[reportUnknownMemberType]
 
 
 def extract_course_name(url: str) -> None | Tuple[str, str]:
