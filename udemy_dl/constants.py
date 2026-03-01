@@ -22,3 +22,4 @@ LOG_FORMAT = (
     "[%(asctime)s] [%(name)s] [%(funcName)s:%(lineno)d] %(levelname)s: %(message)s"
 )
 LOG_DATE_FORMAT = "%I:%M:%S"
+LICENSE_URL = "https://{subdomain}.udemy.com/media-license-server/validate-auth-token?drm_type=widevine&auth_token={auth_token}"

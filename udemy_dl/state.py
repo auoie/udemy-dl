@@ -3,6 +3,8 @@ from logging import Logger
 from pathlib import Path
 from typing import Literal
 
+from pywidevine import Cdm
+
 T_BROWSER_TYPE = Literal[
     "chrome", "firefox", "opera", "edge", "brave", "chromium", "vivaldi", "safari"
 ]
@@ -29,6 +31,6 @@ class State:
     log_level: int
     download_dir: Path
     logger: Logger
-    keys: KeyIdPair | None
     batch: bool
     embed_subs: bool
+    cdm: Cdm | None

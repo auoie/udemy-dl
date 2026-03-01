@@ -16,6 +16,7 @@ from bs4 import BeautifulSoup, Tag
 import dotenv
 import m3u8
 from pydantic import BaseModel
+from pywidevine import PSSH, Cdm, Device
 import requests
 import requests.cookies
 from pathvalidate import sanitize_filename
@@ -27,7 +28,7 @@ import browser_cookie3  # pyright: ignore[reportMissingTypeStubs]
 from urllib.parse import urlparse
 from requests.cookies import RequestsCookieJar
 
-from udemy_dl import constants
+from udemy_dl import constants, utils
 from udemy_dl.state import T_BROWSER_TYPE, KeyIdPair, State
 from udemy_dl.tls import SSLCiphers
 from udemy_dl.download import (
@@ -77,8 +78,8 @@ class Arguments(TypedArgs):
         help="If a video has any subs, embed those subs in the output video"
     )
 
-    decrypt: bool = typed_argparse.arg(
-        help="Decrypt the encrypted videos. Requires a {key: kid} pair in `keyfile.json`"
+    wvd_path: Optional[str] = typed_argparse.arg(
+        help="Widevine device used to generated in {key: kid} pairs in `*.key.json` files"
     )
 
     info: bool = typed_argparse.arg(
@@ -216,14 +217,14 @@ def get_state(args: Arguments):
     logger.info(f"Output directory set to {download_dir}")
     download_dir.mkdir(parents=True, exist_ok=True)
     Path(constants.SAVED_DIR).mkdir(parents=True, exist_ok=True)
-    keys: KeyIdPair | None = None
-    if args.decrypt:
-        keys = get_keys(constants.KEY_FILE_PATH)
-        if keys is None:
-            logger.error(
-                "> Keyfile (or keys) not found! You won't be able to decrypt videos!"
-            )
+    cdm: Cdm | None = None
+    if args.wvd_path != None:
+        device_path = Path(args.wvd_path)
+        if not device_path.exists():
+            logger.error(f"Device file {device_path} not found")
             sys.exit(1)
+        device = Device.load(device_path)
+        cdm = Cdm.from_device(device)
     return State(
         caption_locale=args.lang,
         bearer_token=args.bearer_token,
@@ -236,11 +237,11 @@ def get_state(args: Arguments):
         browser=args.browser,
         use_continuous_lecture_numbers=args.use_continuous_lecture_numbers,
         download_dir=download_dir,
-        keys=keys,
         log_level=log_level,
         logger=logger,
         batch=args.batch_playlists,
         embed_subs=args.embed_subs,
+        cdm=cdm,
     )
 
 
@@ -290,6 +291,13 @@ class Session(object):
                 )
                 time.sleep(0.8)
         return None
+
+    def post(self, url: str, data: str | bytes, logger: Logger, redirect: bool = True):
+        r = self._session.post(url, data, allow_redirects=redirect)
+        if not r.ok:
+            logger.error(r.text)
+            raise Exception(f"{r.status_code} {r.reason}")
+        return r
 
     def get_allow_5xx(self, url: str, logger: Logger) -> requests.Response | None:
         for i in range(10):
@@ -689,6 +697,13 @@ class ExternalLinkWrite(BaseModel):
     contents: str
 
 
+class DecryptionKeysDL(BaseModel):
+    base_name: str
+    file_name: str  # should go in playlist_course_folder instead of course_folder
+    media_license_token: str
+    subdomain: str
+
+
 AssetTask = (
     ArticleWrite
     | QuizDL
@@ -705,6 +720,7 @@ AssetTask = (
     | VideoMp4DL
     | EmbedSubs
     | EmbedMp4Subs
+    | DecryptionKeysDL
 )
 
 
@@ -731,20 +747,23 @@ def asset_to_comparable(asset: AssetTask) -> int:
         case VideoEncryptedDL():
             # must come after caption and index playlist
             return 9
-        case VideoDecrypt():
-            # must come after VideoEncryptedDL
+        case DecryptionKeysDL():
+            # must come after IndexPlaylistDL (depends on PSSH value)
             return 10
-        case VideoDecryptEmbedSubs():
-            # must come after VideoEncryptedDL
+        case VideoDecrypt():
+            # must come after VideoEncryptedDL, DecryptionKeysDL
             return 11
+        case VideoDecryptEmbedSubs():
+            # must come after VideoEncryptedDL, DecryptionKeysDL
+            return 12
         case EmbedSubs():
             # must come after VideoDecrypt, VideoNormalDL. should be independent from VideoDecryptEmbedSubs
-            return 12
+            return 13
         case EmbedMp4Subs():
             # must come after VideoMp4DL()
-            return 13
-        case QuizDL():
             return 14
+        case QuizDL():
+            return 15
 
 
 class LectureGroupDL(BaseModel):
@@ -803,7 +822,8 @@ def create_lecture_group_dl(
                 pre_base = slugify(sanitize_filename(entry.title))
                 base_name = f"{prefix_id:03}_{pre_base}"
                 master_m3u8_name = f"{base_name}.master.m3u8"
-                index_m3u8_name = f"{base_name}.index.m3u8"
+                index_m3u8_name = get_index_playlist_name(base_name)
+                decryption_keys_name = get_decryption_keys_name(base_name)
                 encrypted = main_asset.stream_urls is None
                 urls = main_asset.media_sources
                 hls_stream = find_hls_stream(urls)
@@ -848,7 +868,7 @@ def create_lecture_group_dl(
                             base_name=base_name,
                         )
                         asset_list.append(vid_dl)
-                        if state.keys:
+                        if state.cdm != None:
                             if state.embed_subs:
                                 decrypt_task = VideoDecryptEmbedSubs(
                                     base_name=base_name,
@@ -862,6 +882,14 @@ def create_lecture_group_dl(
                                     encrypted_file_name=encrypted_name,
                                     file_name=decrypted_name,
                                 )
+                            if main_asset.media_license_token != None:
+                                decryption_keys_task = DecryptionKeysDL(
+                                    base_name=base_name,
+                                    file_name=decryption_keys_name,
+                                    media_license_token=main_asset.media_license_token,
+                                    subdomain=subdomain,
+                                )
+                                asset_list.append(decryption_keys_task)
                             asset_list.append(decrypt_task)
                     else:
                         regulardl_name = get_regulardl_video_name(base_name)
@@ -1085,10 +1113,14 @@ def get_asset_filepath(
             | EmbedMp4Subs()
         ):
             return Path(chapter_path, asset.file_name).resolve()
-        case MasterPlaylistDL() | IndexPlaylistDL():
+        case MasterPlaylistDL() | IndexPlaylistDL() | DecryptionKeysDL():
             return Path(playlist_chapter, asset.file_name).resolve()
         case _:
             assert_never(default)
+
+
+def get_decryption_keys_name(base_name: str) -> str:
+    return f"{base_name}.keys.json"
 
 
 def get_encrypted_video_name(base_name: str) -> str:
@@ -1105,6 +1137,14 @@ def get_embedsubs_video_name(base_name: str) -> str:
 
 def get_regulardl_video_name(base_name: str) -> str:
     return f"{base_name}.ts"
+
+
+def get_index_playlist_name(base_name: str) -> str:
+    return f"{base_name}.index.m3u8"
+
+
+def get_index_playlist_path(playlist_chapter_path: Path, base_name: str) -> Path:
+    return Path(playlist_chapter_path, get_index_playlist_name(base_name))
 
 
 def get_encrypted_video_path(chapter_path: Path, base_name: str) -> Path:
@@ -1130,7 +1170,7 @@ def should_skip_dl(asset: AssetTask, filepath: Path, chapter_path: Path) -> bool
             embedsubs_path = get_embedsubs_video_path(chapter_path, base_name)
             # playlist files used by encrypted and regular encrypted files
             decrypted_path = get_decrypted_video_path(chapter_path, base_name)
-            encrypted_path = get_encrypted_video_path(chapter_path, base_name)
+            # encrypted_path = get_encrypted_video_path(chapter_path, base_name)
             regulardl_path = get_regulardl_video_path(chapter_path, base_name)
             # playlist can become outdated, so we delete all of the course m3u8 files at the start
             return (
@@ -1138,9 +1178,9 @@ def should_skip_dl(asset: AssetTask, filepath: Path, chapter_path: Path) -> bool
                 or embedsubs_path.exists()
                 or decrypted_path.exists()
                 or regulardl_path.exists()
-                or encrypted_path.exists()
+                # or encrypted_path.exists()
             )
-        case VideoEncryptedDL():
+        case VideoEncryptedDL() | DecryptionKeysDL():
             base_name = asset.base_name
             embedsubs_path = get_embedsubs_video_path(chapter_path, base_name)
             decrypted_path = get_decrypted_video_path(chapter_path, base_name)
@@ -1274,7 +1314,11 @@ def ffmpeg_embed_args(
 
 
 def decrypt_video(
-    asset: VideoDecrypt, filepath: Path, chapter_path: Path, state: State
+    asset: VideoDecrypt,
+    filepath: Path,
+    chapter_path: Path,
+    playlist_chapter_path: Path,
+    state: State,
 ):
     logger = state.logger
     encrypted_filepath = Path(chapter_path, asset.encrypted_file_name).resolve()
@@ -1283,7 +1327,13 @@ def decrypt_video(
             f"encrypted file not found. skipping: {asset.encrypted_file_name}"
         )
         return
-    keys = state.keys
+    decryption_keys_path = Path(
+        playlist_chapter_path, get_decryption_keys_name(asset.base_name)
+    ).resolve()
+    if not decryption_keys_path.exists():
+        logger.warning(f"decryption file not found. skipping: {decryption_keys_path}")
+        return
+    keys = get_keys(decryption_keys_path)
     if not keys:
         logger.warning(
             f"no keys found skipping decryption: {asset.encrypted_file_name}"
@@ -1309,11 +1359,18 @@ def decrypt_video_embed_subs(
     asset: VideoDecryptEmbedSubs,
     filepath: Path,
     chapter_path: Path,
+    playlist_chapter_path: Path,
     encrypted_filepath: Path,
     state: State,
 ):
     logger = state.logger
-    keys = state.keys
+    decryption_keys_path = Path(
+        playlist_chapter_path, get_decryption_keys_name(asset.base_name)
+    ).resolve()
+    if not decryption_keys_path.exists():
+        logger.warning(f"decryption file not found. skipping: {decryption_keys_path}")
+        return
+    keys = get_keys(decryption_keys_path)
     if not keys:
         logger.warning(
             f"no keys found skipping decryption: {asset.encrypted_file_name}"
@@ -1411,7 +1468,7 @@ def download_asset(
             tmp_filepath.write_bytes(response.content)
             tmp_filepath.rename(filepath)
         case VideoDecrypt():
-            decrypt_video(asset, filepath, chapter_path, state)
+            decrypt_video(asset, filepath, chapter_path, playlist_chapter_path, state)
         case ExternalLinkWrite() | ArticleWrite():
             tmp_filepath = Path(chapter_path, f"{asset.file_name}.part").resolve()
             tmp_filepath.write_text(asset.contents)
@@ -1443,7 +1500,12 @@ def download_asset(
             if encrypted_filepath.exists():
                 # this is normal
                 decrypt_video_embed_subs(
-                    asset, filepath, chapter_path, encrypted_filepath, state
+                    asset,
+                    filepath,
+                    chapter_path,
+                    playlist_chapter_path,
+                    encrypted_filepath,
+                    state,
                 )
             elif decrypted_filepath.exists():
                 # happens iff ran with `--decrypt` and without `--embed` previously
@@ -1465,6 +1527,57 @@ def download_asset(
                 tmp_filepath.rename(filepath)
             else:
                 state.logger.warning(f"{tmp_filepath} not found. rename failed")
+        case DecryptionKeysDL():
+            # verify existence of cdm and index m3u8 file
+            logger.debug(f"starting decryption keys dl task")
+            index_m3u8_filepath = get_index_playlist_path(
+                playlist_chapter_path, asset.base_name
+            )
+            cdm = state.cdm
+            if cdm is None:
+                logger.warning(f"cdm is none. failed to decrypt {asset.base_name}")
+                return
+            if not index_m3u8_filepath.exists():
+                logger.warning(f"encrypted file {asset.base_name} does not exist")
+                return
+            # get the pssh from the encrypted video
+            pssh_b64 = utils.extract_pssh_from_m3u8(index_m3u8_filepath)
+            if pssh_b64 == None:
+                logger.warning(f"failed to find pssh in {asset.base_name}")
+                return
+            pssh = PSSH(pssh_b64)
+            kid = pssh.key_ids[0]
+            logger.info(f"KID is {kid}")
+            # get the decryption key
+            license_url = constants.LICENSE_URL.format(
+                subdomain=asset.subdomain, auth_token=asset.media_license_token
+            )
+            session_id = cdm.open()
+            challenge = cdm.get_license_challenge(session_id, pssh, "STREAMING", False)
+            try:
+                r = session.post(license_url, challenge, state.logger)
+                if not r.ok:
+                    logger.warning(f"r not ok: {r.text}")
+                r.raise_for_status()
+                cdm.parse_license(session_id, r.content)
+                keys = cdm.get_keys(session_id, "CONTENT")
+                key = next((k.key.hex() for k in keys if k.kid == kid), None)
+                if key == None:
+                    logger.error(f"failed to find decryption key for {asset.file_name}")
+                    return
+                key_pair: dict[str, str] = {}
+                key_pair[kid.hex.replace("-", "")] = key
+            except Exception as e:
+                logger.error(f"Failed to get media license token: {e}")
+                return
+            finally:
+                cdm.close(session_id)
+            # write the results
+            tmp_filepath = Path(
+                playlist_chapter_path, f"{asset.file_name}.part"
+            ).resolve()
+            tmp_filepath.write_text(json.dumps(key_pair, indent=2))
+            tmp_filepath.rename(filepath)
         case _:
             assert_never(asset)
 
@@ -1630,7 +1743,7 @@ def run_program(state: State):
             chapters=chapters, info=course_info, subdomain=subdomain
         )
         if save_to_file:
-            udemy_path.write_text(all_course_info.model_dump_json())
+            udemy_path.write_text(all_course_info.model_dump_json(by_alias=True))
     if state.info:
         print(all_course_info.model_dump_json(indent=4))
     else:
