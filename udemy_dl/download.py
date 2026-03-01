@@ -2,13 +2,10 @@ import asyncio
 from pathlib import Path
 import time
 from typing import Coroutine, List, Literal, Sequence
-
 import aiohttp
 from pydantic import BaseModel
 import requests
 import tqdm
-from curl_cffi.requests import BrowserType, AsyncSession
-
 from udemy_dl.state import State
 
 
@@ -67,40 +64,6 @@ class SegmentDL(BaseModel):
     path: Path
 
 
-async def download_cloudflare_files_async(tasks: List[Task], concurrency: int):
-    impersonate = BrowserType.chrome
-    session = AsyncSession(
-        impersonate=impersonate, max_clients=2 * concurrency, timeout=5
-    )
-
-    async def get_async(task: Task):
-        for i in range(10):
-            try:
-                response = await session.get(task.url)
-                response.content
-                if response.ok:
-                    obj = response.content
-                    if task.type == "m3u8_playlist":
-                        obj = normalize_m3u8(obj.decode("utf-8"), task.url).encode(
-                            "utf-8"
-                        )
-                    task.path.write_bytes(obj)
-                    response.close()
-                    return
-                else:
-                    print(
-                        f"failed {task.url}: {response.status_code} (retrying attempt {i})"
-                    )
-                    await asyncio.sleep(0.8)
-            except Exception as e:
-                print(f"failed {task.url}: {e} exception (retrying attempt {i})")
-                await asyncio.sleep(0.8)
-
-    async_arr = [get_async(task) for task in tasks]
-    await gather_with_concurrency(concurrency, async_arr)
-    await session.close()
-
-
 async def download_files_async(tasks: List[Task], concurrency: int):
     conn = aiohttp.TCPConnector(limit=4 * concurrency)
     session = aiohttp.ClientSession(connector=conn)
@@ -110,6 +73,10 @@ async def download_files_async(tasks: List[Task], concurrency: int):
             async with session.get(task.url, ssl=True) as response:
                 if response.ok:
                     obj = await response.read()
+                    if task.type == "m3u8_playlist":
+                        obj = normalize_m3u8(obj.decode("utf-8"), task.url).encode(
+                            "utf-8"
+                        )
                     task.path.write_bytes(obj)
                     response.close()
                     return
@@ -130,7 +97,8 @@ def download_files(tasks: List[Task], concurrency: int):
 
 
 def download_cloudflare_files(tasks: List[Task], concurrency: int):
-    asyncio.run(download_cloudflare_files_async(tasks, concurrency))
+    # asyncio.run(download_cloudflare_files_async(tasks, concurrency))
+    asyncio.run(download_files_async(tasks, concurrency))
 
 
 def download_segment_stream(segment_dl: SegmentDL, state: State):
